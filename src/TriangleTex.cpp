@@ -10,12 +10,21 @@
 #include <glm/gtc/type_ptr.hpp>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#include "Camera.h"
 
 using namespace glm;
 using namespace std;
 
 vec3 position = vec3(0.0f);
 float scaleFactor = 1.0f;
+
+Camera camera(vec3(0.0f, 0.0f, 3.0f));
+
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
+
+float lastX = 400, lastY = 300;
+bool firstMouse = true;
 
 void key_control(GLFWwindow *window, int key, int scancode, int action, int mode)
 {
@@ -43,6 +52,7 @@ out vec3 FragPos;
 out vec3 Normal;
 
 uniform mat4 model;
+uniform mat4 view;
 uniform mat4 projection;
 
 void main()
@@ -53,7 +63,7 @@ void main()
     Normal = mat3(transpose(inverse(model))) * normal;
 
     TexCoord = texCoord;
-    gl_Position = projection * worldPos;
+	gl_Position = projection * view * worldPos;
 }
 )";
 
@@ -269,22 +279,51 @@ GLuint setupGeometry(vector<Vertex>& vertices)
 	return VAO;
 }
 
+void mouse_callback(GLFWwindow* window, double xpos, double ypos)
+{
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos;
+
+    lastX = xpos;
+    lastY = ypos;
+
+    camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    camera.ProcessMouseScroll(yoffset);
+}
+
+
+
 int main()
 {
 	glfwInit();
 	
 
-	GLFWwindow *window = glfwCreateWindow(800, 600, "Adicionando Iluminação - Guilherme Tarrasconi", NULL, NULL);
+	GLFWwindow *window = glfwCreateWindow(800, 600, "Adicionando uma camera em primeira pessoa - Guilherme Tarrasconi", NULL, NULL);
 	glfwMakeContextCurrent(window);
-	glfwSetKeyCallback(window, key_control);
+	//glfwSetKeyCallback(window, key_control);
 	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+
+	glfwSetCursorPosCallback(window, mouse_callback);
+	glfwSetScrollCallback(window, scroll_callback);
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	glEnable(GL_DEPTH_TEST);
 	GLuint shader = setupShader();
 	glUseProgram(shader);
 
 	glUniform3f(glGetUniformLocation(shader, "lightPos"), 2.0f, 2.0f, 2.0f);
-	glUniform3f(glGetUniformLocation(shader, "viewPos"), 0.0f, 0.0f, 3.0f);
+	glUniform3fv(glGetUniformLocation(shader, "viewPos"),1,value_ptr(camera.Position));
 
 	glUniform3f(glGetUniformLocation(shader, "Ka"), 0.2f, 0.2f, 0.2f);
 	glUniform3f(glGetUniformLocation(shader, "Kd"), 0.7f, 0.7f, 0.7f);
@@ -344,23 +383,39 @@ int main()
 
 	glUniform1i(glGetUniformLocation(shader, "texture1"), 0);
 
-	mat4 projection = perspective(radians(45.0f), 800.0f/600.0f, 0.1f, 100.0f);
-	glUniformMatrix4fv(glGetUniformLocation(shader,"projection"),1,GL_FALSE,value_ptr(projection));
 
 	while (!glfwWindowShouldClose(window))
 	{
+		float currentFrame = glfwGetTime();
+		deltaTime = currentFrame - lastFrame;
+		lastFrame = currentFrame;
+
 		glfwPollEvents();
+
+		camera.ProcessKeyboard(window, deltaTime);
+
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		glBindVertexArray(VAO);
-		glBindTexture(GL_TEXTURE_2D, texture);
+		// VIEW
+		mat4 view = camera.GetViewMatrix();
+		glUniformMatrix4fv(glGetUniformLocation(shader, "view"), 1, GL_FALSE, value_ptr(view));
 
+		// PROJECTION (zoom)
+		mat4 projection = perspective(radians(camera.Fov), 800.0f/600.0f, 0.1f, 100.0f);
+		glUniformMatrix4fv(glGetUniformLocation(shader, "projection"), 1, GL_FALSE, value_ptr(projection));
+
+		// VIEW POS (luz especular)
+		glUniform3fv(glGetUniformLocation(shader, "viewPos"), 1, value_ptr(camera.Position));
+
+		// MODEL
 		mat4 model = mat4(1.0f);
-		model = translate(model, vec3(0,0,-3));
 		model = translate(model, position);
 		model = scale(model, vec3(scaleFactor));
 
 		glUniformMatrix4fv(glGetUniformLocation(shader,"model"),1,GL_FALSE,value_ptr(model));
+
+		glBindVertexArray(VAO);
+		glBindTexture(GL_TEXTURE_2D, texture);
 
 		glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 
