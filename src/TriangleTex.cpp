@@ -396,18 +396,14 @@ int main()
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// VIEW
 		mat4 view = camera.GetViewMatrix();
 		glUniformMatrix4fv(glGetUniformLocation(shader, "view"), 1, GL_FALSE, value_ptr(view));
 
-		// PROJECTION (zoom)
 		mat4 projection = perspective(radians(camera.Fov), 800.0f/600.0f, 0.1f, 100.0f);
 		glUniformMatrix4fv(glGetUniformLocation(shader, "projection"), 1, GL_FALSE, value_ptr(projection));
 
-		// VIEW POS (luz especular)
 		glUniform3fv(glGetUniformLocation(shader, "viewPos"), 1, value_ptr(camera.Position));
 
-		// MODEL
 		mat4 model = mat4(1.0f);
 		model = translate(model, position);
 		model = scale(model, vec3(scaleFactor));
